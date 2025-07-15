@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clap Toggle Screen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: white;
+            transition: background-color 0.0s; /* Instant toggle */
+            overflow: hidden;
+            touch-action: none;
+        }
+        #status {
+            position: absolute;
+            top: 35%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            font-family: sans-serif;
+            color: #555;
+            text-align: center;
+        }
+        #meter-container {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 30px;
+            background: #ddd;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        #meter {
+            height: 100%;
+            width: 0%;
+            background: limegreen;
+            transition: width 0.1s linear;
+        }
+        #toggle-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            transition: background-color 0.3s ease;
+        }
+        #toggle-btn:active {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Tap "Start Listening" to begin</div>
+    <div id="meter-container" style="display:none;">
+        <div id="meter"></div>
+    </div>
+    <button id="toggle-btn">Start Listening</button>
+
+    <script>
+        let currentColor = "white";
+        let listening = false;
+        let audioContext, analyser, microphone, processor;
+        let clapCooldown = false;
+
+        const toggleBtn = document.getElementById("toggle-btn");
+        const status = document.getElementById("status");
+        const meterContainer = document.getElementById("meter-container");
+
+        toggleBtn.addEventListener("click", () => {
+            if (!listening) {
+                startListening();
+            } else {
+                stopListening();
+            }
+        });
+
+        function startListening() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioContext.createAnalyser();
+                    microphone = audioContext.createMediaStreamSource(stream);
+                    processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+                    analyser.fftSize = 2048;
+                    microphone.connect(analyser);
+                    analyser.connect(processor);
+                    processor.connect(audioContext.destination);
+
+                    const dataArray = new Uint8Array(analyser.fftSize);
+
+                    processor.onaudioprocess = function () {
+                        analyser.getByteTimeDomainData(dataArray);
+                        let maxVolume = 0;
+
+                        // Calculate peak volume
+                        for (let i = 0; i < dataArray.length; i++) {
+                            let sample = Math.abs(dataArray[i] - 128) / 128;
+                            if (sample > maxVolume) {
+                                maxVolume = sample;
+                            }
+                        }
+
+                        // Update strength meter
+                        updateMeter(maxVolume);
+
+                        // Detect clap (threshold ~0.3)
+                        if (maxVolume > 0.3 && !clapCooldown) {
+                            toggleBackground();
+                            clapCooldown = true;
+
+                            // Cooldown period
+                            setTimeout(() => {
+                                clapCooldown = false;
+                            }, 500);
+                        }
+                    };
+
+                    listening = true;
+                    status.innerText = "Listening for claps...";
+                    toggleBtn.innerText = "Stop Listening";
+                    meterContainer.style.display = "block";
+
+                    // Fullscreen request
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen();
+                    } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
+                        document.documentElement.webkitRequestFullscreen();
+                    }
+                })
+                .catch(err => {
+                    status.innerText = "Microphone access denied!";
+                    console.error(err);
+                });
+        }
+
+        function stopListening() {
+            if (microphone) microphone.disconnect();
+            if (analyser) analyser.disconnect();
+            if (processor) processor.disconnect();
+            if (audioContext) audioContext.close();
+
+            listening = false;
+            status.innerText = 'Tap "Start Listening" to begin';
+            toggleBtn.innerText = "Start Listening";
+            meterContainer.style.display = "none";
+            resetMeter();
+        }
+
+        function toggleBackground() {
+            if (currentColor === "white") {
+                document.body.style.backgroundColor = "black";
+                currentColor = "black";
+            } else {
+                document.body.style.backgroundColor = "white";
+                currentColor = "white";
+            }
+        }
+
+        function updateMeter(volume) {
+            const meter = document.getElementById("meter");
+            let width = Math.min(100, volume * 300); // Scale volume to 0–100%
+            meter.style.width = width + "%";
+
+            if (volume > 0.6) {
+                meter.style.background = "red";
+            } else if (volume > 0.3) {
+                meter.style.background = "orange";
+            } else {
+                meter.style.background = "limegreen";
+            }
+        }
+
+        function resetMeter() {
+            document.getElementById("meter").style.width = "0%";
+        }
+    </script>
+</body>
+</html>
