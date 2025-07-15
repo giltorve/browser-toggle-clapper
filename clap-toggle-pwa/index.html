@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clap Toggle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; background-color: white; overflow: hidden; touch-action: none; }
+        #status { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 2em; font-family: sans-serif; color: #555; text-align: center; }
+        #strength-text { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); font-size: 1.5em; font-family: sans-serif; color: #333; }
+        #meter-container { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 80%; height: 30px; background: #ddd; border-radius: 15px; overflow: hidden; }
+        #meter { height: 100%; width: 0%; background: limegreen; transition: width 0.1s linear; }
+        #toggle-btn { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 15px 30px; font-size: 1.2em; background-color: #007bff; color: white; border: none; border-radius: 25px; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3); transition: background-color 0.3s ease; }
+        #toggle-btn:active { background-color: #0056b3; }
+    </style>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(() => console.log("Service Worker registered"));
+      }
+    </script>
+</head>
+<body>
+    <div id="status">Tap "Start Listening" to begin</div>
+    <div id="strength-text" style="display:none;">Clap Strength: 0%</div>
+    <div id="meter-container" style="display:none;">
+        <div id="meter"></div>
+    </div>
+    <button id="toggle-btn">Start Listening</button>
+    <script>
+        let currentColor = "white", listening = false, audioContext, analyser, microphone, processor, clapCooldown = false;
+        const toggleBtn = document.getElementById("toggle-btn"), status = document.getElementById("status"), strengthText = document.getElementById("strength-text"), meterContainer = document.getElementById("meter-container");
+        toggleBtn.addEventListener("click", () => listening ? stopListening() : startListening());
+        function startListening() {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+                processor = audioContext.createScriptProcessor(2048, 1, 1);
+                analyser.fftSize = 2048;
+                microphone.connect(analyser);
+                analyser.connect(processor);
+                processor.connect(audioContext.destination);
+                const dataArray = new Uint8Array(analyser.fftSize);
+                processor.onaudioprocess = () => {
+                    analyser.getByteTimeDomainData(dataArray);
+                    let maxVolume = 0;
+                    for (let i = 0; i < dataArray.length; i++) {
+                        let sample = Math.abs(dataArray[i] - 128) / 128;
+                        if (sample > maxVolume) maxVolume = sample;
+                    }
+                    updateMeter(maxVolume);
+                    if (maxVolume > 0.3 && !clapCooldown) {
+                        toggleBackground();
+                        clapCooldown = true;
+                        setTimeout(() => clapCooldown = false, 500);
+                    }
+                };
+                listening = true;
+                status.innerText = "Listening for claps...";
+                toggleBtn.innerText = "Stop Listening";
+                meterContainer.style.display = "block";
+                strengthText.style.display = "block";
+                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+            }).catch(err => {
+                status.innerText = "Microphone access denied!";
+                console.error(err);
+            });
+        }
+        function stopListening() {
+            if (microphone) microphone.disconnect();
+            if (analyser) analyser.disconnect();
+            if (processor) processor.disconnect();
+            if (audioContext) audioContext.close();
+            listening = false;
+            status.innerText = 'Tap "Start Listening" to begin';
+            toggleBtn.innerText = "Start Listening";
+            meterContainer.style.display = "none";
+            strengthText.style.display = "none";
+            resetMeter();
+        }
+        function toggleBackground() {
+            document.body.style.backgroundColor = currentColor === "white" ? "black" : "white";
+            currentColor = currentColor === "white" ? "black" : "white";
+        }
+        function updateMeter(volume) {
+            const meter = document.getElementById("meter"), strengthDisplay = document.getElementById("strength-text");
+            let percent = Math.min(100, Math.round(volume * 300));
+            meter.style.width = percent + "%";
+            strengthDisplay.innerText = `Clap Strength: ${percent}%`;
+            meter.style.background = volume > 0.6 ? "red" : volume > 0.3 ? "orange" : "limegreen";
+        }
+        function resetMeter() {
+            document.getElementById("meter").style.width = "0%";
+            document.getElementById("strength-text").innerText = "Clap Strength: 0%";
+        }
+    </script>
+</body>
+</html>
