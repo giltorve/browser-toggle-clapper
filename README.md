@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 👏 Clap Toggle
 
 A simple webpage that toggles between black and white screens on claps, with a real-time sound strength meter.  
@@ -27,3 +28,6 @@ A simple webpage that toggles between black and white screens on claps, with a r
 1. Clone this repo:
    ```bash
    git clone https://github.com/giltorve/clap-toggle.git
+=======
+A webpage that toggles black/white on claps with an audio strength meter
+>>>>>>> 6058ff249a25fc3188bf326fd17b685740fff3f1
